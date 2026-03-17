@@ -2,6 +2,11 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.0.3'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'jacoco' 
+}
+
+jacoco {
+    toolVersion = "0.8.14" // Specify the JaCoCo version
 }
 
 group = 'com.recipe_maker'
@@ -28,16 +33,40 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	implementation 'org.modelmapper:modelmapper:2.1.1'
+	implementation 'net.datafaker:datafaker:2.5.4'
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	testImplementation 'com.h2database:h2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	runtimeOnly 'org.postgresql:postgresql'
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
+	finalizedBy jacocoTestReport
+}
+
+tasks.named('jacocoTestReport') {
+    dependsOn test // Ensures tests run before report generation
+    reports {
+        xml.required = true // XML report is often needed by IDEs and other tools
+        html.required = true
+        html.outputLocation = layout.buildDirectory.dir('reports/jacoco/html') // Custom output dir for HTML
+    }
+}
+
+// Optional: Code coverage verification rules (e.g., minimum coverage percentage)
+tasks.named('jacocoTestCoverageVerification') {
+    violationRules {
+        rule {
+            limit {
+                minimum = 0.5 // Example: require 50% minimum line coverage
+            }
+        }
+    }
 }
