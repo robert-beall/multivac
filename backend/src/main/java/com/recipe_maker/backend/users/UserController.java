@@ -1,10 +1,21 @@
 package com.recipe_maker.backend.users;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@RestController("/users")
+import jakarta.validation.Valid;
+
+/**
+ * Controller class for managing user-related endpoints.
+ */
+@RestController
+@RequestMapping("/users")
 public class UserController {
+    /** The service for managing user-related operations. */
     private final UserService userService;
 
     /**
@@ -21,7 +32,8 @@ public class UserController {
      * @return UserDTO of user to register
      */
     @PostMapping("/register")
-    public UserDTO registerUser(UserDTO userDTO) {
-        return userService.registerUser(userDTO);
+    public ResponseEntity<Void> registerUser(@Valid @RequestBody UserDTO userDTO) {
+        userService.registerUser(userDTO);
+        return ResponseEntity.status(HttpStatus.CREATED).build();
     }
 }

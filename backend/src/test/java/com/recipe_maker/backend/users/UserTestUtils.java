@@ -41,12 +41,11 @@ public class UserTestUtils implements TestUtils<User, UserDTO> {
      * @return UserDTO instance
      */
     public UserDTO createDTO() {
-        Long id = faker.number().randomNumber();
         String username = faker.credentials().username();
         String email = faker.internet().emailAddress();
-        String password = faker.credentials().password();
+        String password = faker.credentials().password(8, 16);
 
-        return new UserDTO(id, username, password, email);
+        return new UserDTO(username, password, email);
     }
 
     /**
