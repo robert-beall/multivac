@@ -11,7 +11,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.annotation.AliasFor;
 
-import com.recipe_maker.backend.configurations.SecurityFilterChainConfig;
+import com.recipe_maker.backend.configurations.WebSecurityConfig;
 
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
@@ -20,7 +20,7 @@ import com.recipe_maker.backend.configurations.SecurityFilterChainConfig;
         SecurityAutoConfiguration.class,
         UserDetailsServiceAutoConfiguration.class
 })
-@Import(SecurityFilterChainConfig.class)
+@Import(WebSecurityConfig.class)
 public @interface WebMvcTestSecured {
     @AliasFor(annotation = WebMvcTest.class, attribute = "controllers")
     Class<?>[] controllers() default {};

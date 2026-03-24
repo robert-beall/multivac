@@ -1,13 +1,19 @@
 package com.recipe_maker.backend.users;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.time.Instant;
+import java.util.Optional;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,9 +21,27 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 import org.modelmapper.ModelMapper;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+
+import com.recipe_maker.backend.authentication.AuthenticationTestUtils;
+import com.recipe_maker.backend.authentication.JwtService;
+import com.recipe_maker.backend.authentication.LoginDTO;
+import com.recipe_maker.backend.authentication.RefreshToken;
+import com.recipe_maker.backend.authentication.RefreshTokenDTO;
+import com.recipe_maker.backend.authentication.RefreshTokenRepository;
+import com.recipe_maker.backend.authentication.TokenResponseDTO;
+
+import net.datafaker.Faker;
 
 /**
  * Test class for UserService, which manages user-related operations such as registration.
@@ -31,6 +55,10 @@ public class UserServiceTest {
     @Mock 
     private UserRepository userRepository;
 
+    /** The repository for managing refresh tokens. */
+    @Mock
+    private RefreshTokenRepository refreshTokenRepository;
+
     /** The ModelMapper for mapping between DTOs and entities. */
     @Mock
     private ModelMapper modelMapper;
@@ -39,15 +67,39 @@ public class UserServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    /** The AuthenticationManager for handling authentication logic. */
+    @Mock 
+    private AuthenticationManager authenticationManager;
+
+    /** The JwtService for generating and validating JWT tokens. */
+    @Mock
+    private JwtService jwtService;
+
+    /** The mocked SecurityContext instance. */
+    @Mock
+    private SecurityContext securityContext;
+
+    /** The mocked Authentication instance. */
+    @Mock
+    private Authentication authentication;
+
     /** The utility class for creating test user data. */
     private UserTestUtils userTestUtils;
+
+    /** The utility class for creating test authentication data. */
+    private AuthenticationTestUtils authenticationTestUtils;
 
     /** The auto-closeable resource for managing mock objects. */
     private AutoCloseable autoCloseable;
 
+    /** The Faker instance for generating fake data. */
+    private Faker faker;
+
     /** Constructor for initializing the test class. */
     public UserServiceTest() {
         userTestUtils = new UserTestUtils();
+        authenticationTestUtils = new AuthenticationTestUtils();
+        faker = new Faker();
     }
 
     /** Sets up the test environment before each test method is executed. */
@@ -63,7 +115,8 @@ public class UserServiceTest {
     }
 
     /**
-     * Tests the existsByUsername method of UserService to ensure that it correctly identifies whether a user with a given username exists.
+     * Tests the existsByUsername method of UserService to ensure that it
+     * correctly identifies whether a user with a given username exists.
      */
     @Test
     void testExistsByUsername() {
@@ -77,7 +130,8 @@ public class UserServiceTest {
     }
 
     /**
-     * Tests the existsByUsername method of UserService to ensure that it correctly identifies whether a user with a given username does not exist.
+     * Tests the existsByUsername method of UserService to ensure that it correctly 
+     * identifies whether a user with a given username does not exist.
      */
     @Test
     void testExistsByUsernameNotFound() {
@@ -91,7 +145,8 @@ public class UserServiceTest {
     }
 
     /**
-     * Tests the existsByEmail method of UserService to ensure that it correctly identifies whether a user with a given email exists.
+     * Tests the existsByEmail method of UserService to ensure that it correctly identifies 
+     * whether a user with a given email exists.
      */
     @Test
     void testExistsByEmail() {
@@ -105,7 +160,8 @@ public class UserServiceTest {
     }
 
     /**
-     * Tests the existsByEmail method of UserService to ensure that it correctly identifies whether a user with a given email does not exist.
+     * Tests the existsByEmail method of UserService to ensure that it correctly identifies 
+     * whether a user with a given email does not exist.
      */
     @Test
     void testExistsByEmailNotFound() {
@@ -126,21 +182,26 @@ public class UserServiceTest {
      */
     @Test
     void testRegisterUser() {
+        // Create a UserDTO with test data
         UserDTO dto = userTestUtils.createDTO();
 
+        // Create an expected User entity based on the UserDTO
         User expected = new User();
         expected.setUsername(dto.getUsername());
         expected.setPassword(dto.getPassword());
         expected.setEmail(dto.getEmail());
 
+        // Set up the mock repository and services to return the expected values
         when(userRepository.existsByUsername(any())).thenReturn(false);
         when(userRepository.save(any(User.class))).thenReturn(expected);
         when(modelMapper.map(dto, User.class)).thenReturn(expected);
         when(modelMapper.map(expected, UserDTO.class)).thenReturn(dto);
         when(passwordEncoder.encode(any())).thenReturn(dto.getPassword());
 
+        // Capture the User entity passed to the userRepository's save method
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-    
+        
+        // Call the registerUser method and verify that the userRepository's save method was called with the expected User entity
         userService.registerUser(dto);
         verify(userRepository, times(1)).save(userCaptor.capture());
         assertEquals(expected, userCaptor.getValue());
@@ -154,19 +215,22 @@ public class UserServiceTest {
      */
     @Test
     void testRegisterUserDuplicateUsername() {
+        // Create a UserDTO with test data
         UserDTO dto = userTestUtils.createDTO();
         
+        // Create an expected User entity based on the UserDTO
         User expected = new User();
         expected.setUsername(dto.getUsername());
         expected.setPassword(dto.getPassword());
         expected.setEmail(dto.getEmail());
 
+        // Set up the mock repository and services to return the expected values, including a duplicate username scenario
         when(userRepository.existsByUsername(any())).thenReturn(true);
         when(modelMapper.map(dto, User.class)).thenReturn(expected);
         when(modelMapper.map(expected, UserDTO.class)).thenReturn(dto);
         when(passwordEncoder.encode(any())).thenReturn(dto.getPassword());
 
-    
+        // Call the registerUser method and assert that a DataIntegrityViolationException is thrown due to the duplicate username, and verify that the userRepository's save method was not called
         assertThrows(DataIntegrityViolationException.class, () -> userService.registerUser(dto), "Username already exists");
         verify(userRepository, times(0)).save(any(User.class));
     }
@@ -179,20 +243,223 @@ public class UserServiceTest {
      */
     @Test
     void testRegisterUserDuplicateEmail() {
+        // Create a UserDTO with test data
         UserDTO dto = userTestUtils.createDTO();
         
+        // Create an expected User entity based on the UserDTO
         User expected = new User();
         expected.setUsername(dto.getUsername());
         expected.setPassword(dto.getPassword());
         expected.setEmail(dto.getEmail());
         
+        // Set up the mock repository and services to return the expected values, including a duplicate email scenario
+        when(userRepository.existsByUsername(any())).thenReturn(false);
         when(userRepository.existsByEmail(any())).thenReturn(true);
         when(modelMapper.map(dto, User.class)).thenReturn(expected);
         when(modelMapper.map(expected, UserDTO.class)).thenReturn(dto);
         when(passwordEncoder.encode(any())).thenReturn(dto.getPassword());
 
-    
+        // Call the registerUser method and assert that a DataIntegrityViolationException is thrown due to the duplicate email, and verify that the userRepository's save method was not called
         assertThrows(DataIntegrityViolationException.class, () -> userService.registerUser(dto));
         verify(userRepository, times(0)).save(any(User.class));
+    }
+
+    /**
+     * Tests the login method of UserService to ensure that a user can log in successfully with valid credentials.
+      * It verifies that the authenticationManager's authenticate method is called with the expected authentication token.
+      * It also checks that the jwtService's generateAccessToken and generateRefreshToken methods are called to generate the appropriate tokens.
+     */
+    @Test
+    void testLogin() {
+        // Create a LoginDTO with test credentials
+        LoginDTO loginDTO = authenticationTestUtils.createLoginDTO();
+
+        User user = new User();
+        user.setUsername(loginDTO.getUsername());
+        user.setPassword(loginDTO.getPassword());
+
+        RefreshToken refreshTokenEntity = authenticationTestUtils.createRefreshToken();
+
+        // Generate a random token using Faker for testing purposes
+        String token = faker.internet().uuid();
+
+        // Set up the mock authenticationManager to return null (indicating successful authentication)
+        when(authenticationManager.authenticate(any())).thenReturn(null);
+        when(userRepository.findByUsername(any())).thenReturn(Optional.of(user));
+        when(jwtService.generateAccessToken(any())).thenReturn(token);
+        when(jwtService.generateRefreshToken(any())).thenReturn(token);
+        when(jwtService.getRefreshTokenExpiration()).thenReturn(faker.number().randomNumber());
+        doNothing().when(refreshTokenRepository).deleteByUser(any());
+        when(refreshTokenRepository.save(any())).thenReturn(refreshTokenEntity);
+
+        // Call the login method and capture the response
+        TokenResponseDTO response = userService.login(loginDTO);
+
+        // Verify that the authenticationManager's authenticate method was called with the expected authentication token
+        verify(authenticationManager, times(1)).authenticate(any(UsernamePasswordAuthenticationToken.class));
+        verify(jwtService, times(1)).generateAccessToken(any());
+        verify(jwtService, times(1)).generateRefreshToken(any());
+        verify(refreshTokenRepository, times(1)).deleteByUser(any());
+        verify(refreshTokenRepository, times(1)).save(any());
+        
+        // Assert that the access and refresh tokens in the response match the expected token
+        assertEquals(token, response.getAccessToken());
+        assertEquals(token, response.getRefreshToken());
+    }
+
+    /**
+     * Tests the login method of UserService when the username cannot be found.
+     */
+    @Test
+    void testLoginUserNotFound() {
+        // Create a LoginDTO with test credentials
+        LoginDTO loginDTO = authenticationTestUtils.createLoginDTO();
+
+        User user = new User();
+        user.setUsername(loginDTO.getUsername());
+        user.setPassword(loginDTO.getPassword());
+
+        // Set up the mock authenticationManager to return null (indicating successful authentication)
+        when(authenticationManager.authenticate(any())).thenReturn(null);
+        when(userRepository.findByUsername(any())).thenReturn(Optional.empty());
+
+        // Call the login method and capture the response
+        assertThrows(UsernameNotFoundException.class, () -> userService.login(loginDTO), "User not found");
+
+        // Verify that the authenticationManager's authenticate method was called with the expected authentication token
+        verify(authenticationManager, times(1)).authenticate(any(UsernamePasswordAuthenticationToken.class));
+        verify(jwtService, never()).generateAccessToken(any());
+        verify(jwtService, never()).generateRefreshToken(any());
+        verify(refreshTokenRepository, never()).deleteByUser(any());
+        verify(refreshTokenRepository, never()).save(any());
+    }
+
+    /**
+     * Tests the refresh method of UserService to ensure that a user can refresh their tokens successfully.
+     * It verifies that the jwtService's isTokenValid and extractUsername methods are called with the expected token.
+     * It also checks that the jwtService's generateAccessToken and generateRefreshToken methods are called to generate the appropriate tokens.
+     * @throws IllegalArgumentException if the refresh token is invalid
+     */
+    @Test
+    void testRefresh() {
+        // Create a LoginDTO and RefreshTokenDTO with test data
+        LoginDTO loginDTO = authenticationTestUtils.createLoginDTO();
+
+        // Create new RefreshToken for testing
+        RefreshToken refreshToken = authenticationTestUtils.createRefreshToken();
+
+        // Create DTO from refreshToken entity
+        RefreshTokenDTO refreshTokenDTO = new RefreshTokenDTO();
+        refreshTokenDTO.setRefreshToken(refreshToken.getToken());
+
+        // Generate a random token using Faker for testing purposes
+        String token = faker.internet().uuid();
+
+        // Set up the mock jwtService to validate the token and extract the username, as well as generate new tokens
+        when(refreshTokenRepository.findByToken(any())).thenReturn(Optional.of(refreshToken));
+        when(jwtService.isTokenValid(any())).thenReturn(true);
+        when(jwtService.extractUsername(any())).thenReturn(loginDTO.getUsername());
+        when(jwtService.generateAccessToken(any())).thenReturn(token);
+        when(jwtService.generateRefreshToken(any())).thenReturn(token);
+
+        // Call the refresh method and capture the response
+        TokenResponseDTO response = userService.refresh(refreshTokenDTO);
+        // Verify that the jwtService's isTokenValid and extractUsername methods were called with the expected token
+        verify(refreshTokenRepository, times(1)).findByToken(any());
+        verify(refreshTokenRepository, times(1)).delete(any());
+        verify(jwtService, times(1)).generateAccessToken(any());
+        verify(jwtService, times(1)).generateRefreshToken(any());
+
+        // Assert that the access and refresh tokens in the response match the expected token
+        assertEquals(token, response.getAccessToken());
+        assertEquals(token, response.getRefreshToken());
+    }
+
+    /**
+     * Tests the refresh method of UserService to ensure that an invalid refresh token results in an IllegalArgumentException.
+     * @throws IllegalArgumentException if the refresh token is invalid
+     */
+    @Test
+    void testRefreshTokenNotFound() {
+        // Create a RefreshTokenDTO with test data
+        RefreshTokenDTO refreshTokenDTO = authenticationTestUtils.createRefreshTokenDTO();
+
+        // Set up the mock jwtService to return false for token validation
+        when(refreshTokenRepository.findByToken(any())).thenReturn(Optional.empty());
+
+        // Call the refresh method and assert that an IllegalArgumentException is thrown due to the invalid token
+        assertThrows(IllegalArgumentException.class, () -> userService.refresh(refreshTokenDTO));
+
+        // Verify that the jwtService's isTokenValid method was called with the expected token, and that the extractUsername, generateAccessToken, and generateRefreshToken methods were not called
+        verify(refreshTokenRepository, never()).save(any());
+        verify(jwtService, never()).generateRefreshToken(any());
+    }
+
+    /**
+     * Tests the refresh method of UserService to ensure that an expired refresh token results in an IllegalArgumentException.
+     * @throws IllegalArgumentException if the refresh token is invalid
+     */
+    @Test
+    void testRefreshTokenExpired() {
+        // Create a RefreshToken with test data and a matching RefreshTokenDTO
+        RefreshToken refreshToken = authenticationTestUtils.createRefreshToken();
+
+        // Set the token to be expired
+        refreshToken.setExpiresAt(Instant.now());
+
+        // Create new RefreshTokenDTO from RefreshToken test instance
+        RefreshTokenDTO refreshTokenDTO = new RefreshTokenDTO(refreshToken.getToken());
+
+        // Set up the mock jwtService to return false for token validation
+        when(refreshTokenRepository.findByToken(any())).thenReturn(Optional.of(refreshToken));
+
+        // Call the refresh method and assert that an IllegalArgumentException is thrown due to the invalid token
+        assertThrows(IllegalArgumentException.class, () -> userService.refresh(refreshTokenDTO));
+
+        // Verify that the jwtService's isTokenValid method was called with the expected token, and that the extractUsername, generateAccessToken, and generateRefreshToken methods were not called
+        verify(refreshTokenRepository, never()).save(any());
+        verify(jwtService, never()).generateRefreshToken(any());
+    }
+
+    /**
+     * Test the logout() method when logout is successful.
+     */
+    @Test
+    void testLogout() {
+        // Mocked user data
+        User user = userTestUtils.createEntity();
+
+        // Mock Spring security responses
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        when(authentication.getName()).thenReturn(user.getUsername());
+        when(userRepository.findByUsername(any())).thenReturn(Optional.of(user));
+        
+        // Mock static SecurityContextHolder method getContext()
+        try (MockedStatic<SecurityContextHolder> mockedStatic = Mockito.mockStatic(SecurityContextHolder.class)) {
+            mockedStatic.when(() -> SecurityContextHolder.getContext()).thenReturn(securityContext);
+
+            assertDoesNotThrow(() -> userService.logout());
+            verify(refreshTokenRepository, times(1)).deleteByUser(user);
+        }
+    }
+
+     /**
+     * Test the logout() method when logout fails because the user
+     * is not found.
+     */
+    @Test
+    void testLogoutUserNotFound() {
+        // Mock Spring security responses
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        when(authentication.getName()).thenReturn(faker.credentials().username());
+        when(userRepository.findByUsername(any())).thenReturn(Optional.empty());
+        
+        // Mock static SecurityContextHolder method getContext()
+        try (MockedStatic<SecurityContextHolder> mockedStatic = Mockito.mockStatic(SecurityContextHolder.class)) {
+            mockedStatic.when(() -> SecurityContextHolder.getContext()).thenReturn(securityContext);
+
+            assertThrows(UsernameNotFoundException.class, () -> userService.logout(), "User not found");
+            verify(refreshTokenRepository, never()).deleteByUser(any());
+        }
     }
 }
