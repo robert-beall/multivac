@@ -73,8 +73,7 @@ public class UserDetailsServiceImplTest {
 
         UserDetails userDetails = userDetailsServiceImpl.loadUserByUsername(user.getUsername());
 
-        assertEquals(user.getUsername(), userDetails.getUsername());
-        assertEquals(user.getPassword(), userDetails.getPassword());
+        assertEquals(user, userDetails);
     }
 
     /**

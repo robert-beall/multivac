@@ -68,7 +68,7 @@ public class UserController {
      * @return void response.
      */
     @PostMapping("/logout")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasRole('USER')")
     public ResponseEntity<Void> logout() {
         userService.logout();
         return ResponseEntity.noContent().build();

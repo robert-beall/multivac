@@ -1,6 +1,7 @@
 package com.recipe_maker.backend.users;
 
 import java.time.Instant;
+import java.util.Set;
 
 import org.modelmapper.ModelMapper;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -18,6 +19,9 @@ import com.recipe_maker.backend.authentication.RefreshToken;
 import com.recipe_maker.backend.authentication.RefreshTokenDTO;
 import com.recipe_maker.backend.authentication.RefreshTokenRepository;
 import com.recipe_maker.backend.authentication.TokenResponseDTO;
+import com.recipe_maker.backend.roles.Role;
+import com.recipe_maker.backend.roles.RoleName;
+import com.recipe_maker.backend.roles.RoleRepository;
 
 /**
  * Service class for managing users.
@@ -27,6 +31,9 @@ import com.recipe_maker.backend.authentication.TokenResponseDTO;
 public class UserService {
     /** The repository for managing user data. */
     private UserRepository userRepository;
+
+    /** The repository for managing role data. */
+    private RoleRepository roleRepository;
 
     /** The repository for managing refresh tokens. */
     private RefreshTokenRepository refreshTokenRepository;
@@ -51,12 +58,14 @@ public class UserService {
      */
     public UserService(
         UserRepository userRepository, 
+        RoleRepository roleRepository,
         ModelMapper modelMapper, 
         PasswordEncoder passwordEncoder,
         AuthenticationManager authenticationManager,
         JwtService jwtService,
         RefreshTokenRepository refreshTokenRepository) {
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
         this.modelMapper = modelMapper;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
@@ -96,9 +105,13 @@ public class UserService {
             throw new DataIntegrityViolationException("Email already exists");
         }
 
+        Role userRole = roleRepository.findByName(RoleName.ROLE_USER)
+        .orElseThrow(() -> new IllegalStateException("Default role not found"));
+
         // Map DTO to entity, encode password, and save user
         User user = modelMapper.map(userDTO, User.class);
         user.setPassword(passwordEncoder.encode(user.getPassword()));
+        user.setRoles(Set.of(userRole)); // Assign base USER role
         userRepository.save(user);
     }
 

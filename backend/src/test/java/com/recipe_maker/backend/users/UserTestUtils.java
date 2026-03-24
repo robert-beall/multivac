@@ -1,8 +1,13 @@
 package com.recipe_maker.backend.users;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import com.recipe_maker.backend.TestUtils;
+import com.recipe_maker.backend.roles.Role;
+import com.recipe_maker.backend.roles.RoleDTO;
+import com.recipe_maker.backend.roles.RoleTestUtils;
 
 import net.datafaker.Faker;
 
@@ -10,8 +15,14 @@ public class UserTestUtils implements TestUtils<User, UserDTO> {
     /** The Faker instance for generating test data. */
     private Faker faker;
 
+    private RoleTestUtils roleTestUtils;
+
+    /**
+     * Constructor for test utils class.
+     */
     public UserTestUtils() {
         faker = new Faker();
+        roleTestUtils = new RoleTestUtils();
     }
 
     /**
@@ -23,8 +34,10 @@ public class UserTestUtils implements TestUtils<User, UserDTO> {
         String username = faker.credentials().username();
         String email = faker.internet().emailAddress();
         String password = faker.credentials().password();
+        Set<Role> roles = new HashSet<>(roleTestUtils.createEntityList(2));
 
-        return new User(id, username, password, email);
+
+        return new User(id, username, password, email, roles);
     }
 
     /**
@@ -44,8 +57,9 @@ public class UserTestUtils implements TestUtils<User, UserDTO> {
         String username = faker.credentials().username();
         String email = faker.internet().emailAddress();
         String password = faker.credentials().password(8, 16);
+        Set<RoleDTO> roles = new HashSet<>(roleTestUtils.createDTOList(2));
 
-        return new UserDTO(username, password, email);
+        return new UserDTO(username, password, email, roles);
     }
 
     /**

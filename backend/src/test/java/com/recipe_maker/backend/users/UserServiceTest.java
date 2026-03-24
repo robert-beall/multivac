@@ -40,6 +40,9 @@ import com.recipe_maker.backend.authentication.RefreshToken;
 import com.recipe_maker.backend.authentication.RefreshTokenDTO;
 import com.recipe_maker.backend.authentication.RefreshTokenRepository;
 import com.recipe_maker.backend.authentication.TokenResponseDTO;
+import com.recipe_maker.backend.roles.Role;
+import com.recipe_maker.backend.roles.RoleRepository;
+import com.recipe_maker.backend.roles.RoleTestUtils;
 
 import net.datafaker.Faker;
 
@@ -54,6 +57,10 @@ public class UserServiceTest {
     /** The repository for managing user data. */
     @Mock 
     private UserRepository userRepository;
+
+    /** The repository for managing role data. */
+    @Mock
+    private RoleRepository roleRepository;
 
     /** The repository for managing refresh tokens. */
     @Mock
@@ -86,6 +93,9 @@ public class UserServiceTest {
     /** The utility class for creating test user data. */
     private UserTestUtils userTestUtils;
 
+    /** The utility class for creating test role data. */
+    private RoleTestUtils roleTestUtils;
+
     /** The utility class for creating test authentication data. */
     private AuthenticationTestUtils authenticationTestUtils;
 
@@ -99,6 +109,7 @@ public class UserServiceTest {
     public UserServiceTest() {
         userTestUtils = new UserTestUtils();
         authenticationTestUtils = new AuthenticationTestUtils();
+        roleTestUtils = new RoleTestUtils();
         faker = new Faker();
     }
 
@@ -191,8 +202,12 @@ public class UserServiceTest {
         expected.setPassword(dto.getPassword());
         expected.setEmail(dto.getEmail());
 
+        Role role = roleTestUtils.createEntity();
+
         // Set up the mock repository and services to return the expected values
         when(userRepository.existsByUsername(any())).thenReturn(false);
+        when(userRepository.existsByEmail(any())).thenReturn(false);
+        when(roleRepository.findByName(any())).thenReturn(Optional.of(role));
         when(userRepository.save(any(User.class))).thenReturn(expected);
         when(modelMapper.map(dto, User.class)).thenReturn(expected);
         when(modelMapper.map(expected, UserDTO.class)).thenReturn(dto);
@@ -261,6 +276,31 @@ public class UserServiceTest {
 
         // Call the registerUser method and assert that a DataIntegrityViolationException is thrown due to the duplicate email, and verify that the userRepository's save method was not called
         assertThrows(DataIntegrityViolationException.class, () -> userService.registerUser(dto));
+        verify(userRepository, times(0)).save(any(User.class));
+    }
+
+    /**
+     * Tests the registerUser method of UserService to ensure that an IllegalStateException
+     * is thrown when the base role does not exist in the database.
+     */
+    @Test
+    void testRegisterUserRoleNotFound() {
+        // Create a UserDTO with test data
+        UserDTO dto = userTestUtils.createDTO();
+        
+        // Create an expected User entity based on the UserDTO
+        User expected = new User();
+        expected.setUsername(dto.getUsername());
+        expected.setPassword(dto.getPassword());
+        expected.setEmail(dto.getEmail());
+        
+        // Set up the mock repository and services to return the expected values, including a duplicate email scenario
+        when(userRepository.existsByUsername(any())).thenReturn(false);
+        when(userRepository.existsByEmail(any())).thenReturn(false);
+        when(roleRepository.findByName(any())).thenReturn(Optional.empty());
+
+        // Call the registerUser method and assert that a DataIntegrityViolationException is thrown due to the duplicate email, and verify that the userRepository's save method was not called
+        assertThrows(IllegalStateException.class, () -> userService.registerUser(dto));
         verify(userRepository, times(0)).save(any(User.class));
     }
 

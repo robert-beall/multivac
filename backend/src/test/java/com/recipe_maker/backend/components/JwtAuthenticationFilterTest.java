@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 
 import com.recipe_maker.backend.authentication.JwtService;
@@ -97,15 +96,10 @@ public class JwtAuthenticationFilterTest {
     void testDoFilterInternal() throws IOException, ServletException {
         String header = "Bearer " + faker.internet().uuid();
         User user = userTestUtils.createEntity();
-        UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
-            .username(user.getUsername())
-            .password(user.getPassword())
-            .roles("USER") // Stand-in until we implement roles and permissions
-            .build();
 
         when(request.getHeader("Authorization")).thenReturn(header);
         when(jwtService.isTokenValid(any())).thenReturn(true);
-        when(userDetailsService.loadUserByUsername(any())).thenReturn(userDetails);
+        when(userDetailsService.loadUserByUsername(any())).thenReturn(user);
 
         assertDoesNotThrow(() -> jwtAuthenticationFilter.doFilterInternal(request, response, filterChain));
         verify(filterChain, times(1)).doFilter(request, response);
