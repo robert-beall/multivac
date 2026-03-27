@@ -6,7 +6,6 @@ import java.util.Set;
 
 import com.recipe_maker.backend.TestUtils;
 import com.recipe_maker.backend.roles.Role;
-import com.recipe_maker.backend.roles.RoleDTO;
 import com.recipe_maker.backend.roles.RoleTestUtils;
 
 import net.datafaker.Faker;
